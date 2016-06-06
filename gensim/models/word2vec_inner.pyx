@@ -146,6 +146,55 @@ cdef unsigned long long fast_sentence_sg_neg(
 
     return next_random
 
+cdef unsigned long long fast_sentence_sg_neg_bayes(
+    const int negative, np.uint32_t *cum_table, unsigned long long cum_table_len,
+    REAL_t *syn0, REAL_t *syn1neg, const int size, const np.uint32_t word_index,
+    const np.uint32_t word2_index, const REAL_t alpha, REAL_t *work,
+    unsigned long long next_random, REAL_t *word_locks) nogil:
+
+    cdef long long a
+    cdef long long row1 = word2_index * size, row2
+    cdef unsigned long long modulo = 281474976710655ULL
+    cdef REAL_t f, g, label
+    cdef np.uint32_t target_index
+    cdef int d
+
+    memset(work, 0, size * cython.sizeof(REAL_t))
+    target_index = word_index
+    label = ONEF
+
+    print("BAYES")
+    # YUCK: uncopy code
+    # observed
+    row2 = target_index * size
+    f = our_dot(&size, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
+    if f <= -MAX_EXP or f >= MAX_EXP:
+        continue
+    f = EXP_TABLE[<int>((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]
+    g = (label - f) * alpha
+    our_saxpy(&size, &g, &syn1neg[row2], &ONE, work, &ONE)
+    our_saxpy(&size, &g, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
+
+    # expected
+    for d in range(negative):
+        target_index = bisect_left(cum_table, (next_random >> 16) % cum_table[cum_table_len-1], 0, cum_table_len)
+        next_random = (next_random * <unsigned long long>25214903917ULL + 11) & modulo
+        if target_index == word_index:
+            continue
+        label = <REAL_t>0.0
+
+        row2 = target_index * size
+        f = our_dot(&size, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
+        if f <= -MAX_EXP or f >= MAX_EXP:
+            continue
+        f = EXP_TABLE[<int>((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]
+        g = (label - f) * alpha
+        our_saxpy(&size, &g, &syn1neg[row2], &ONE, work, &ONE)
+        our_saxpy(&size, &g, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
+
+    our_saxpy(&size, &word_locks[word2_index], work, &ONE, &syn0[row1], &ONE)
+
+    return next_random
 
 cdef void fast_sentence_cbow_hs(
     const np.uint32_t *word_point, const np.uint8_t *word_code, int codelens[MAX_SENTENCE_LEN],
@@ -257,6 +306,7 @@ cdef unsigned long long fast_sentence_cbow_neg(
 def train_batch_sg(model, sentences, alpha, _work):
     cdef int hs = model.hs
     cdef int negative = model.negative
+    cdef int bayes = model.bayes
     cdef int sample = (model.sample != 0)
 
     cdef REAL_t *syn0 = <REAL_t *>(np.PyArray_DATA(model.syn0))
@@ -352,7 +402,10 @@ def train_batch_sg(model, sentences, alpha, _work):
                     if hs:
                         fast_sentence_sg_hs(points[i], codes[i], codelens[i], syn0, syn1, size, indexes[j], _alpha, work, word_locks)
                     if negative:
-                        next_random = fast_sentence_sg_neg(negative, cum_table, cum_table_len, syn0, syn1neg, size, indexes[i], indexes[j], _alpha, work, next_random, word_locks)
+                        if bayes == 0:
+                            next_random = fast_sentence_sg_neg(negative, cum_table, cum_table_len, syn0, syn1neg, size, indexes[i], indexes[j], _alpha, work, next_random, word_locks)
+                        else:
+                            next_random = fast_sentence_sg_neg_bayes(negative, cum_table, cum_table_len, syn0, syn1neg, size, indexes[i], indexes[j], _alpha, work, next_random, word_locks)
 
     return effective_words
 
