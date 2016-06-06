@@ -163,17 +163,16 @@ cdef unsigned long long fast_sentence_sg_neg_bayes(
     target_index = word_index
     label = ONEF
 
-    print("BAYES")
     # YUCK: uncopy code
     # observed
     row2 = target_index * size
     f = our_dot(&size, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
-    if f <= -MAX_EXP or f >= MAX_EXP:
-        continue
-    f = EXP_TABLE[<int>((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]
-    g = (label - f) * alpha
-    our_saxpy(&size, &g, &syn1neg[row2], &ONE, work, &ONE)
-    our_saxpy(&size, &g, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
+    # TODO: double check
+    if not (f <= -MAX_EXP or f >= MAX_EXP):        
+        f = EXP_TABLE[<int>((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]
+        g = (label - f) * alpha
+        our_saxpy(&size, &g, &syn1neg[row2], &ONE, work, &ONE)
+        our_saxpy(&size, &g, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
 
     # expected
     for d in range(negative):
