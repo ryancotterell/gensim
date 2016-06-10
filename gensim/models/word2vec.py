@@ -343,7 +343,7 @@ class Word2Vec(utils.SaveLoad):
     def __init__(
             self, sentences=None, size=100, alpha=0.025, window=5, min_count=5,
             max_vocab_size=None, sample=1e-3, seed=1, workers=3, min_alpha=0.0001,
-            sg=0, hs=0, negative=5, cbow_mean=1, bayes=0, hashfxn=hash, iter=5, null_word=0,
+            sg=0, hs=0, negative=5, cbow_mean=1, bayes=0, samples=5, hashfxn=hash, iter=5, null_word=0,
             trim_rule=None, sorted_vocab=1, batch_words=MAX_WORDS_IN_BATCH):
         """
         Initialize the model from an iterable of `sentences`. Each sentence is a
@@ -435,6 +435,7 @@ class Word2Vec(utils.SaveLoad):
         self.negative = negative
         self.cbow_mean = int(cbow_mean)
         self.bayes = bayes
+        self.samples = samples
         self.hashfxn = hashfxn
         self.iter = iter
         self.null_word = null_word
@@ -996,6 +997,12 @@ class Word2Vec(utils.SaveLoad):
             self.syn1 = zeros((len(self.vocab), self.layer1_size), dtype=REAL)
         if self.negative:
             self.syn1neg = zeros((len(self.vocab), self.layer1_size), dtype=REAL)
+        if self.bayes:
+            self.syn0_prior = zeros((len(self.vocab), self.layer1_size), dtype=REAL)
+            self.syn1_prior = zeros((len(self.vocab), self.layer1_size), dtype=REAL)
+            self.syn0_var = 0.01*ones((len(self.vocab), self.layer1_size), dtype=REAL)
+            self.syn1_var = 0.01*ones((len(self.vocab), self.layer1_size), dtype=REAL)
+            
         self.syn0norm = None
 
         self.syn0_lockf = ones(len(self.vocab), dtype=REAL)  # zeros suppress learning
