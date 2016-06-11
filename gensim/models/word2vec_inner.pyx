@@ -156,7 +156,7 @@ cdef unsigned long long fast_sentence_sg_neg_bayes(
     const int negative, const int samples, np.uint32_t *cum_table, unsigned long long cum_table_len,
     REAL_t *syn0, REAL_t *syn1neg, const int size, const np.uint32_t word_index,
     const np.uint32_t word2_index, const REAL_t alpha, REAL_t *work, REAL_t *eps, gsl_rng *r,
-    unsigned long long next_random, REAL_t *word_locks) nogil:
+    unsigned long long next_random, REAL_t *word_locks, const float C) nogil:
 
     cdef long long a
     cdef long long row1 = word2_index * size, row2
@@ -164,47 +164,44 @@ cdef unsigned long long fast_sentence_sg_neg_bayes(
     cdef REAL_t f, g, label
     cdef np.uint32_t target_index
     cdef int d
-    #cdef double tmp 
-    
-    memset(work, 0, size * cython.sizeof(REAL_t))
-    target_index = word_index
 
-    # observed
+    memset(work, 0, size * cython.sizeof(REAL_t))
+
+    target_index = word_index
     row2 = target_index * size
     f = our_dot(&size, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
-    
-    # TODO: double check
-    if not (f <= -MAX_EXP or f >= MAX_EXP):        
+    if f <= -MAX_EXP or f >= MAX_EXP:
+        pass
+    else:
         f = EXP_TABLE[<int>((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]
         g = (1.0 - f) * alpha
         our_saxpy(&size, &g, &syn1neg[row2], &ONE, work, &ONE)
         our_saxpy(&size, &g, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
 
-
-    cdef int i
-    # expected
     for d in range(negative):
         target_index = bisect_left(cum_table, (next_random >> 16) % cum_table[cum_table_len-1], 0, cum_table_len)
         next_random = (next_random * <unsigned long long>25214903917ULL + 11) & modulo
         if target_index == word_index:
             continue
         row2 = target_index * size
-        for _ in range(samples):
-            # TODO: get Gaussian sample
-            # Following Kingma and Welling (2014), we sample eps ~ N(0, 1)
-            # mean + eps * sigma
-            for i in range(size): # sample each component separately
-                eps[i] = gsl_ran_gaussian(r, 1.0)
+        f = our_dot(&size, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
+        if f <= -MAX_EXP or f >= MAX_EXP:
+            continue
+        f = EXP_TABLE[<int>((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]
+        g = -f * alpha
+        our_saxpy(&size, &g, &syn1neg[row2], &ONE, work, &ONE)
+        our_saxpy(&size, &C, &syn1neg[row2], &ONE, &syn1neg[row2], &ONE)
 
-            f = our_dot(&size, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
-            if f <= -MAX_EXP or f >= MAX_EXP:
-                continue
-            # sigmoid
-            f = EXP_TABLE[<int>((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]
-            g = -f * alpha
-            our_saxpy(&size, &g, &syn1neg[row2], &ONE, work, &ONE)
-            our_saxpy(&size, &g, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
+        our_saxpy(&size, &g, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
 
+        
+
+    #for i in range(size): # sample each component separately
+    #work[i] += (gsl_ran_gaussian_ratio_method(r, 0.1))
+
+    #our_saxpy(&size, &C, &syn0[row1], &ONE, work, &ONE)
+    our_saxpy(&size, &C, &syn0[row1], &ONE, work, &ONE)
+     
     our_saxpy(&size, &word_locks[word2_index], work, &ONE, &syn0[row1], &ONE)
     
     return next_random
@@ -328,6 +325,7 @@ def train_batch_sg(model, sentences, alpha, _work):
     cdef REAL_t *work
     cdef REAL_t _alpha = alpha
     cdef int size = model.layer1_size
+    cdef float C = model.C
 
     cdef int codelens[MAX_SENTENCE_LEN]
     cdef np.uint32_t indexes[MAX_SENTENCE_LEN]
@@ -424,7 +422,7 @@ def train_batch_sg(model, sentences, alpha, _work):
                         if bayes == 0:
                             next_random = fast_sentence_sg_neg(negative, cum_table, cum_table_len, syn0, syn1neg, size, indexes[i], indexes[j], _alpha, work, next_random, word_locks)
                         else:
-                            next_random = fast_sentence_sg_neg_bayes(negative, samples, cum_table, cum_table_len, syn0, syn1neg, size, indexes[i], indexes[j], _alpha, work, eps, r, next_random, word_locks)
+                            next_random = fast_sentence_sg_neg_bayes(negative, samples, cum_table, cum_table_len, syn0, syn1neg, size, indexes[i], indexes[j], _alpha, work, eps, r, next_random, word_locks, C)
 
     return effective_words
 
