@@ -341,7 +341,7 @@ class Word2Vec(utils.SaveLoad):
 
     """
     def __init__(
-            self, sentences=None, size=100, alpha=0.025, window=5, min_count=5,
+            self, sentences=None, size=100, alpha=0.025, window=5, min_count=5, C=0.0,
             max_vocab_size=None, sample=1e-3, seed=1, workers=3, min_alpha=0.0001,
             sg=0, hs=0, negative=5, cbow_mean=1, bayes=0, samples=5, hashfxn=hash, iter=5, null_word=0,
             trim_rule=None, sorted_vocab=1, batch_words=MAX_WORDS_IN_BATCH):
@@ -423,6 +423,7 @@ class Word2Vec(utils.SaveLoad):
         if size % 4 != 0:
             logger.warning("consider setting layer size to a multiple of 4 for greater performance")
         self.alpha = float(alpha)
+        self.C = float(C)
         self.window = int(window)
         self.max_vocab_size = max_vocab_size
         self.seed = seed

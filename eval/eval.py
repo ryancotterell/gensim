@@ -29,8 +29,9 @@ def wordsim(scores, model):
 def main(fname, fsim, fquestions):
     scores = read_sim(fsim)
     corpus = Text8Corpus(fname)
-    model = Word2Vec(corpus, sg=1, bayes=1, samples=1, workers=4)
-    model.accuracy(fquestions)
+    model = Word2Vec(corpus, sg=1, hs=0, negative=5, bayes=1, samples=1, workers=4, min_count=20, C=-.0001, iter=50)
+    #model.accuracy(fquestions)
+    #print np.linalg.norm(model["Russia"], 2)
     print wordsim(scores, model)
     
 if __name__ == "__main__":
