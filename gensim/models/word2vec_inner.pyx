@@ -155,7 +155,7 @@ cdef unsigned long long fast_sentence_sg_neg(
 cdef unsigned long long fast_sentence_sg_neg_bayes(
     const int negative, const int samples, np.uint32_t *cum_table, unsigned long long cum_table_len,
     REAL_t *syn0, REAL_t *syn1neg, const int size, const np.uint32_t word_index,
-    const np.uint32_t word2_index, const REAL_t alpha, REAL_t *work, gsl_rng *r,
+    const np.uint32_t word2_index, const REAL_t alpha, REAL_t *work, REAL_t *eps, gsl_rng *r,
     unsigned long long next_random, REAL_t *word_locks) nogil:
 
     cdef long long a
@@ -181,9 +181,7 @@ cdef unsigned long long fast_sentence_sg_neg_bayes(
         our_saxpy(&size, &g, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
 
 
-    # random variable
-    # TODO: this allocation takes a lot of time, can we move it somewhere else?
-    cdef double tmp
+    cdef int i
     # expected
     for d in range(negative):
         target_index = bisect_left(cum_table, (next_random >> 16) % cum_table[cum_table_len-1], 0, cum_table_len)
@@ -195,8 +193,8 @@ cdef unsigned long long fast_sentence_sg_neg_bayes(
             # TODO: get Gaussian sample
             # Following Kingma and Welling (2014), we sample eps ~ N(0, 1)
             # mean + eps * sigma
-            for _ in range(size): # sample each component separately 
-                tmp = gsl_ran_gaussian(r, 1.0)
+            for i in range(size): # sample each component separately
+                eps[i] = gsl_ran_gaussian(r, 1.0)
 
             f = our_dot(&size, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
             if f <= -MAX_EXP or f >= MAX_EXP:
@@ -345,8 +343,6 @@ def train_batch_sg(model, sentences, alpha, _work):
     cdef REAL_t *syn1
     cdef np.uint32_t *points[MAX_SENTENCE_LEN]
     cdef np.uint8_t *codes[MAX_SENTENCE_LEN]
-    cdef gsl_rng *r = gsl_rng_alloc(gsl_rng_mt19937)
-
     
     # For negative sampling
     cdef REAL_t *syn1neg
@@ -354,6 +350,11 @@ def train_batch_sg(model, sentences, alpha, _work):
     cdef unsigned long long cum_table_len
     # for sampling (negative and frequent-word downsampling)
     cdef unsigned long long next_random
+
+    # for Bayesian method
+    cdef gsl_rng *r = gsl_rng_alloc(gsl_rng_mt19937)
+    _eps = np.zeros((size))
+    cdef REAL_t *eps=  <REAL_t *>np.PyArray_DATA(_eps)
 
     if hs:
         syn1 = <REAL_t *>(np.PyArray_DATA(model.syn1))
@@ -423,7 +424,7 @@ def train_batch_sg(model, sentences, alpha, _work):
                         if bayes == 0:
                             next_random = fast_sentence_sg_neg(negative, cum_table, cum_table_len, syn0, syn1neg, size, indexes[i], indexes[j], _alpha, work, next_random, word_locks)
                         else:
-                            next_random = fast_sentence_sg_neg_bayes(negative, samples, cum_table, cum_table_len, syn0, syn1neg, size, indexes[i], indexes[j], _alpha, work, r, next_random, word_locks)
+                            next_random = fast_sentence_sg_neg_bayes(negative, samples, cum_table, cum_table_len, syn0, syn1neg, size, indexes[i], indexes[j], _alpha, work, eps, r, next_random, word_locks)
 
     return effective_words
 
