@@ -6,6 +6,9 @@
 #
 # Copyright (C) 2013 Radim Rehurek <me@radimrehurek.com>
 # Licensed under the GNU LGPL v2.1 - http://www.gnu.org/licenses/lgpl.html
+#distutils: language = c++
+#distutils: libraries = ['stdc++']
+#distutils: extra_compile_args = ["-std=c++11"]
 
 import cython
 import numpy as np
@@ -146,6 +149,7 @@ cdef unsigned long long fast_sentence_sg_neg(
 
     return next_random
 
+
 cdef unsigned long long fast_sentence_sg_neg_bayes(
     const int negative, const int samples, np.uint32_t *cum_table, unsigned long long cum_table_len,
     REAL_t *syn0, REAL_t *syn1neg, const int size, const np.uint32_t word_index,
@@ -161,9 +165,7 @@ cdef unsigned long long fast_sentence_sg_neg_bayes(
 
     memset(work, 0, size * cython.sizeof(REAL_t))
     target_index = word_index
-    label = ONEF
 
-    # YUCK: uncopy code
     # observed
     row2 = target_index * size
     f = our_dot(&size, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
@@ -171,25 +173,28 @@ cdef unsigned long long fast_sentence_sg_neg_bayes(
     # TODO: double check
     if not (f <= -MAX_EXP or f >= MAX_EXP):        
         f = EXP_TABLE[<int>((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]
-        g = (label - f) * alpha
+        g = (1.0 - f) * alpha
         our_saxpy(&size, &g, &syn1neg[row2], &ONE, work, &ONE)
         our_saxpy(&size, &g, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
 
     # expected
     for d in range(negative):
+        target_index = bisect_left(cum_table, (next_random >> 16) % cum_table[cum_table_len-1], 0, cum_table_len)
+        next_random = (next_random * <unsigned long long>25214903917ULL + 11) & modulo
+        if target_index == word_index:
+            continue
+        row2 = target_index * size
         for _ in range(samples):
-            target_index = bisect_left(cum_table, (next_random >> 16) % cum_table[cum_table_len-1], 0, cum_table_len)
-            next_random = (next_random * <unsigned long long>25214903917ULL + 11) & modulo
-            if target_index == word_index:
-                continue
-            label = <REAL_t>0.0
+            # TODO: get Gaussian sample
+            # Following Kingma and Welling (2014), we sample eps ~ N(0, 1)
+            # mean + eps * sigma
             
-            row2 = target_index * size
             f = our_dot(&size, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
             if f <= -MAX_EXP or f >= MAX_EXP:
                 continue
+            # sigmoid
             f = EXP_TABLE[<int>((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]
-            g = (label - f) * alpha
+            g = -f * alpha
             our_saxpy(&size, &g, &syn1neg[row2], &ONE, work, &ONE)
             our_saxpy(&size, &g, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
 
