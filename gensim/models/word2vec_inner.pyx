@@ -155,7 +155,7 @@ cdef unsigned long long fast_sentence_sg_neg(
 cdef unsigned long long fast_sentence_sg_neg_bayes(
     const int negative, const int samples, np.uint32_t *cum_table, unsigned long long cum_table_len,
     REAL_t *syn0, REAL_t *syn1neg, const int size, const np.uint32_t word_index,
-    const np.uint32_t word2_index, const REAL_t alpha, REAL_t *work,
+    const np.uint32_t word2_index, const REAL_t alpha, REAL_t *work, gsl_rng *r,
     unsigned long long next_random, REAL_t *word_locks) nogil:
 
     cdef long long a
@@ -183,7 +183,6 @@ cdef unsigned long long fast_sentence_sg_neg_bayes(
 
     # random variable
     # TODO: this allocation takes a lot of time, can we move it somewhere else?
-    cdef gsl_rng *r = gsl_rng_alloc(gsl_rng_mt19937)
     cdef double tmp
     # expected
     for d in range(negative):
@@ -209,7 +208,7 @@ cdef unsigned long long fast_sentence_sg_neg_bayes(
             our_saxpy(&size, &g, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
 
     our_saxpy(&size, &word_locks[word2_index], work, &ONE, &syn0[row1], &ONE)
-
+    
     return next_random
 
 cdef void fast_sentence_cbow_hs(
@@ -346,7 +345,9 @@ def train_batch_sg(model, sentences, alpha, _work):
     cdef REAL_t *syn1
     cdef np.uint32_t *points[MAX_SENTENCE_LEN]
     cdef np.uint8_t *codes[MAX_SENTENCE_LEN]
+    cdef gsl_rng *r = gsl_rng_alloc(gsl_rng_mt19937)
 
+    
     # For negative sampling
     cdef REAL_t *syn1neg
     cdef np.uint32_t *cum_table
@@ -422,7 +423,7 @@ def train_batch_sg(model, sentences, alpha, _work):
                         if bayes == 0:
                             next_random = fast_sentence_sg_neg(negative, cum_table, cum_table_len, syn0, syn1neg, size, indexes[i], indexes[j], _alpha, work, next_random, word_locks)
                         else:
-                            next_random = fast_sentence_sg_neg_bayes(negative, samples, cum_table, cum_table_len, syn0, syn1neg, size, indexes[i], indexes[j], _alpha, work, next_random, word_locks)
+                            next_random = fast_sentence_sg_neg_bayes(negative, samples, cum_table, cum_table_len, syn0, syn1neg, size, indexes[i], indexes[j], _alpha, work, r, next_random, word_locks)
 
     return effective_words
 

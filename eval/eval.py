@@ -29,7 +29,7 @@ def wordsim(scores, model):
 def main(fname, fsim, fquestions):
     scores = read_sim(fsim)
     corpus = Text8Corpus(fname)
-    model = Word2Vec(corpus, sg=1, bayes=1, samples=1)
+    model = Word2Vec(corpus, sg=1, bayes=1, samples=1, workers=4)
     model.accuracy(fquestions)
     print wordsim(scores, model)
     
