@@ -18,6 +18,8 @@ from libc.math cimport exp
 from libc.math cimport log
 from libc.string cimport memset
 
+from cython_gsl cimport *
+
 # scipy <= 0.15
 try:
     from scipy.linalg.blas import fblas
@@ -162,7 +164,8 @@ cdef unsigned long long fast_sentence_sg_neg_bayes(
     cdef REAL_t f, g, label
     cdef np.uint32_t target_index
     cdef int d
-
+    #cdef double tmp 
+    
     memset(work, 0, size * cython.sizeof(REAL_t))
     target_index = word_index
 
@@ -177,6 +180,10 @@ cdef unsigned long long fast_sentence_sg_neg_bayes(
         our_saxpy(&size, &g, &syn1neg[row2], &ONE, work, &ONE)
         our_saxpy(&size, &g, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
 
+
+    # random variable
+    #cdef gsl_rng *r = gsl_rng_alloc(gsl_rng_mt19937)
+
     # expected
     for d in range(negative):
         target_index = bisect_left(cum_table, (next_random >> 16) % cum_table[cum_table_len-1], 0, cum_table_len)
@@ -188,7 +195,7 @@ cdef unsigned long long fast_sentence_sg_neg_bayes(
             # TODO: get Gaussian sample
             # Following Kingma and Welling (2014), we sample eps ~ N(0, 1)
             # mean + eps * sigma
-            
+
             f = our_dot(&size, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
             if f <= -MAX_EXP or f >= MAX_EXP:
                 continue
