@@ -26,10 +26,10 @@ def wordsim(scores, model):
     vec1, vec2 = np.array(vec1), np.array(vec2)
     return rho(vec1, vec2)
     
-def main(fname, fsim, fquestions):
+def main(fname, fsim, fquestions, C):
     scores = read_sim(fsim)
     corpus = Text8Corpus(fname)
-    model = Word2Vec(corpus, sg=1, hs=0, negative=5, bayes=1, samples=1, workers=4, min_count=20, C=-.0001, iter=50)
+    model = Word2Vec(corpus, sg=1, hs=0, negative=5, bayes=1, samples=1, workers=4, min_count=20, C=C, iter=5)
     #model.accuracy(fquestions)
     #print np.linalg.norm(model["Russia"], 2)
     print wordsim(scores, model)
@@ -40,6 +40,7 @@ if __name__ == "__main__":
     p.add_argument('--data', type=str, help='input text')
     p.add_argument('--sim', type=str, help='word similarity')
     p.add_argument('--questions', type=str, help='questions')
+    p.add_argument('--C', type=float, help='C')
     args = p.parse_args()
-    main(args.data, args.sim, args.questions)
+    main(args.data, args.sim, args.questions, float(args.C))
 
