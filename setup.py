@@ -129,7 +129,9 @@ setup(
     ext_modules=[
         Extension('gensim.models.word2vec_inner',
             sources=['./gensim/models/word2vec_inner.c'],
-            include_dirs=[model_dir]),
+            libraries=['gsl', 'gslcblas'],
+            library_dirs=['/usr/local/Cellar/gsl/1.16/lib'],            
+            include_dirs=[model_dir, '/usr/local/Cellar/gsl/1.16/include']),
         Extension('gensim.models.doc2vec_inner',
             sources=['./gensim/models/doc2vec_inner.c'],
             include_dirs=[model_dir]),
